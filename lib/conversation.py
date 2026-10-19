@@ -1,6 +1,5 @@
 """Allows lichess-bot to send messages to the chat."""
 import logging
-import re
 import chess
 import chess.engine
 from lib import model, openings, training
@@ -25,12 +24,11 @@ MORETIME_MAX = 60
 
 def strip_comment(text: str) -> str:
     """
-    Drop a comment from a chat command: everything from a '#' that starts a word.
+    Drop a comment from a chat command: '!' starts a command and '/' ends it, anything after is ignored.
 
-    Lichess blocks repeating the same message, so "!line e6 d4 # try 2" lets a command be sent again.
-    A '#' inside a word is kept, so checkmate moves like "Qxf7#" still work.
+    Lichess blocks repeating the same message, so "!line e6 d4 / try 2" lets a command be sent again.
     """
-    return re.sub(r"(^|\s)#.*", "", text).strip()
+    return text.split("/", 1)[0].strip()
 
 
 class ChatLine:
@@ -104,7 +102,7 @@ class Conversation:
                             "!learn [chance %] (I blunder sometimes, find the tactic; casual only), !learn off, "
                             f"!moretime [{MORETIME_MIN}-{MORETIME_MAX}] (I add seconds to your clock, "
                             f"{MORETIME_DEFAULT} by default; casual only). "
-                            "Text after # is ignored, so you can repeat a command: !moretime # 2")
+                            "Text after / is ignored, so you can repeat a command: !moretime / 2")
         elif cmd == "openings" or cmd.startswith("opening "):
             self.opening_command(line, cmd)
         elif cmd == "moretime" or cmd.startswith("moretime "):
