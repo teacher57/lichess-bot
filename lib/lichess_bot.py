@@ -3,7 +3,7 @@ import argparse
 import chess
 import chess.pgn
 from chess.variant import find_variant
-from lib import engine_wrapper, model, lichess, matchmaking
+from lib import engine_wrapper, model, lichess, matchmaking, openings, training
 import json
 import logging
 import logging.handlers
@@ -38,6 +38,8 @@ from collections import defaultdict
 from collections.abc import Iterator, MutableSequence
 from http.client import RemoteDisconnected
 from queue import Empty
+import queue
+import threading
 from multiprocessing.pool import Pool
 from collections import Counter
 from typing import TypedDict, cast, TypeAlias
@@ -70,6 +72,9 @@ class VersioningType(TypedDict):
 
 
 logger = logging.getLogger(__name__)
+
+# Seconds the bot waits before its first move (as White or Black) in casual games, so the opponent can pick an opening.
+OPENING_WAIT = 10
 
 with open(os.path.join(os.path.dirname(__file__), "versioning.yml")) as version_file:
     versioning_info: VersioningType = yaml.safe_load(version_file)
@@ -710,7 +715,8 @@ def play_game(li: lichess.Lichess,
             delay = msec(config.rate_limiting_delay)
 
             takebacks_accepted = read_takeback_record(game)
-            max_takebacks_accepted = config.max_takebacks_accepted
+            # Casual games: unlimited takebacks. Rated games: config limit.
+            max_takebacks_accepted = float("inf") if game.mode == "casual" else config.max_takebacks_accepted
 
             keyword_map: defaultdict[str, str] = defaultdict(str, me=game.me.name, opponent=game.opponent.name)
             hello = get_greeting("hello", config.greeting, keyword_map)
@@ -721,9 +727,26 @@ def play_game(li: lichess.Lichess,
             disconnect_time = correspondence_disconnect_time if not game.state.get("moves") else seconds(0)
             prior_game = None
             board = chess.Board()
-            game_stream = itertools.chain([json.dumps(game.state).encode("utf-8")], lines)
+            game_stream = awake_lines(itertools.chain([json.dumps(game.state).encode("utf-8")], lines))
             quit_after_all_games_finish = config.quit_after_all_games_finish
             stay_in_game = True
+
+            def play_engine_move() -> None:
+                print_move_number(board)
+                engine.play_move(board,
+                                 game,
+                                 li,
+                                 Timer(),
+                                 move_overhead,
+                                 can_ponder,
+                                 is_correspondence,
+                                 correspondence_move_time,
+                                 engine_cfg,
+                                 fake_think_time(config, board, game))
+                time.sleep(to_seconds(delay))
+
+            # Monotonic time of the delayed first move (see OPENING_WAIT), or None when not waiting.
+            opening_wait_until: float | None = None
             while stay_in_game and (not stop.terminated or quit_after_all_games_finish) and not stop.force_quit:
                 move_attempted = False
                 try:
@@ -739,21 +762,16 @@ def play_game(li: lichess.Lichess,
                         if not is_game_over(game) and is_engine_move(game, prior_game, board):
                             disconnect_time = correspondence_disconnect_time
                             say_hello(conversation, hello, hello_spectators, board)
-                            setup_timer = Timer()
-                            print_move_number(board)
-                            move_attempted = True
-                            engine.play_move(board,
-                                             game,
-                                             li,
-                                             setup_timer,
-                                             move_overhead,
-                                             can_ponder,
-                                             is_correspondence,
-                                             correspondence_move_time,
-                                             engine_cfg,
-                                             fake_think_time(config, board, game))
-                            time.sleep(to_seconds(delay))
+                            if game.mode == "casual" and len(board.move_stack) < 2 and game.id not in openings.chosen_by_game:
+                                opening_wait_until = time.monotonic() + OPENING_WAIT
+                                conversation.send_message("player",
+                                                          f"You have {OPENING_WAIT} s to pick my opening: type !openings")
+                            else:
+                                move_attempted = True
+                                play_engine_move()
                         elif is_game_over(game):
+                            for message in training.on_game_over(board, game.id, game.is_white):
+                                conversation.send_message("player", message)
                             tell_user_game_result(game, board)
                             engine.send_game_result(game, board)
                             conversation.send_message("player", goodbye)
@@ -772,6 +790,13 @@ def play_game(li: lichess.Lichess,
                         prior_game = copy.deepcopy(game)
                     elif u_type == "ping" and should_exit_game(board, game, prior_game, li, is_correspondence):
                         stay_in_game = False
+
+                    if (opening_wait_until is not None
+                            and (time.monotonic() >= opening_wait_until or game.id in openings.chosen_by_game)):
+                        opening_wait_until = None
+                        if not is_game_over(game) and len(board.move_stack) < 2 and bot_to_move(game, board):
+                            move_attempted = True
+                            play_engine_move()
                 except (HTTPError, ReadTimeout, RemoteDisconnected, ChunkedEncodingError, RequestsConnectionError,
                         StopIteration) as e:
                     stopped = isinstance(e, StopIteration)
@@ -851,6 +876,37 @@ def print_move_number(board: chess.Board) -> None:
     """Log the move number."""
     logger.info("")
     logger.info(f"move: {len(board.move_stack) // 2 + 1}")
+
+
+def awake_lines(lines: Iterator[bytes], interval: float = 0.5) -> Iterator[bytes]:
+    """
+    Read the game stream in a background thread and yield its lines.
+
+    Yields b"" (a ping) whenever nothing arrives within `interval` seconds, so the game loop can act on timers
+    (e.g. the opening-choice wait) while still reading chat. Stream errors and the end of the stream are passed on.
+    """
+    events: queue.Queue[tuple[str, bytes | BaseException | None]] = queue.Queue()
+
+    def read() -> None:
+        try:
+            for line in lines:
+                events.put(("line", line))
+            events.put(("end", None))
+        except BaseException as error:
+            events.put(("error", error))
+
+    threading.Thread(target=read, daemon=True).start()
+    while True:
+        try:
+            kind, item = events.get(timeout=interval)
+        except Empty:
+            yield b""
+            continue
+        if kind == "end":
+            return
+        if kind == "error":
+            raise cast(BaseException, item)
+        yield cast(bytes, item)
 
 
 def next_update(lines: Iterator[bytes]) -> GameEventType:

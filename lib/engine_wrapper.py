@@ -15,7 +15,7 @@ import math
 import contextlib
 from collections import Counter
 from collections.abc import Callable
-from lib import model, lichess
+from lib import model, lichess, openings, training
 from lib.config import Configuration, change_value_to_list
 from lib.timer import Timer, msec, seconds, msec_str, sec_str, to_seconds
 from lib.lichess_types import (ReadableType, ChessDBMoveType, LichessEGTBMoveType, OPTIONS_GO_EGTB_TYPE, OPTIONS_TYPE,
@@ -161,7 +161,21 @@ class EngineWrapper:
         lichess_bot_tbs = engine_cfg.lichess_bot_tbs
 
         best_move: MOVE
-        best_move = get_book_move(board, game, polyglot_cfg)
+        line_move, line_message = openings.next_move(board, game.id)
+        if line_message:
+            li.chat(game.id, "player", line_message)
+        if line_move is not None:
+            best_move = chess.engine.PlayResult(line_move, None)
+        else:
+            best_move = get_book_move(board, game, polyglot_cfg)
+
+        if best_move.move is None:
+            # Opening is over: learning mode may play a deliberate mistake (!learn)
+            training_move, training_messages = training.before_move(board, game.id, engine_cfg.dir)
+            for message in training_messages:
+                li.chat(game.id, "player", message)
+            if training_move is not None:
+                best_move = chess.engine.PlayResult(training_move, None)
 
         if best_move.move is None:
             best_move = get_egtb_move(board,
@@ -736,12 +750,18 @@ def check_for_draw_offer(game: model.Game) -> bool:
     return bool(game.state.get(f"{game.opponent_color[0]}draw"))
 
 
+book_depth_by_game: dict[str, int] = {}
+
+
 def get_book_move(board: chess.Board, game: model.Game,
                   polyglot_cfg: Configuration) -> chess.engine.PlayResult:
     """Get a move from an opening book."""
     no_book_move = chess.engine.PlayResult(None, None)
     use_book = polyglot_cfg.enabled
-    max_game_length = polyglot_cfg.max_depth * 2 - 1
+    # Book length is picked once per game, between min_depth and max_depth full moves.
+    if game.id not in book_depth_by_game:
+        book_depth_by_game[game.id] = random.randint(polyglot_cfg.min_depth, polyglot_cfg.max_depth)
+    max_game_length = book_depth_by_game[game.id] * 2 - 1
     if not use_book or len(board.move_stack) > max_game_length:
         return no_book_move
 
