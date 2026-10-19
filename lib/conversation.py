@@ -1,5 +1,6 @@
 """Allows lichess-bot to send messages to the chat."""
 import logging
+import re
 import chess
 import chess.engine
 from lib import model, openings, training
@@ -20,6 +21,16 @@ CHAT_ABORT_DELAY = 60
 MORETIME_DEFAULT = 15
 MORETIME_MIN = 5
 MORETIME_MAX = 60
+
+
+def strip_comment(text: str) -> str:
+    """
+    Drop a comment from a chat command: everything from a '#' that starts a word.
+
+    Lichess blocks repeating the same message, so "!line e6 d4 # try 2" lets a command be sent again.
+    A '#' inside a word is kept, so checkmate moves like "Qxf7#" still work.
+    """
+    return re.sub(r"(^|\s)#.*", "", text).strip()
 
 
 class ChatLine:
@@ -69,8 +80,9 @@ class Conversation:
         if line.room == "player" and line.username != self.game.username:
             # The opponent is here (e.g. typing a !line), so give them time for their first move.
             self.game.delay_abort(seconds(CHAT_ABORT_DELAY))
-        if line.text[0] == self.command_prefix:
-            self.command(line, line.text[1:].lower())
+        text = strip_comment(line.text)
+        if text.startswith(self.command_prefix):
+            self.command(line, text[1:].lower())
 
     def command(self, line: ChatLine, cmd: str) -> None:
         """
@@ -91,13 +103,14 @@ class Conversation:
                             "if you leave it, I play my own moves; casual only), !line (show it), !line off, "
                             "!learn [chance %] (I blunder sometimes, find the tactic; casual only), !learn off, "
                             f"!moretime [{MORETIME_MIN}-{MORETIME_MAX}] (I add seconds to your clock, "
-                            f"{MORETIME_DEFAULT} by default; casual only)")
+                            f"{MORETIME_DEFAULT} by default; casual only). "
+                            "Text after # is ignored, so you can repeat a command: !moretime # 2")
         elif cmd == "openings" or cmd.startswith("opening "):
             self.opening_command(line, cmd)
         elif cmd == "moretime" or cmd.startswith("moretime "):
             self.moretime_command(line, cmd)
         elif cmd == "line" or cmd.startswith("line "):
-            self.line_command(line, line.text[len(self.command_prefix) + len("line"):].strip())
+            self.line_command(line, strip_comment(line.text)[len(self.command_prefix) + len("line"):].strip())
         elif cmd == "learn" or cmd.startswith("learn "):
             self.learn_command(line, cmd)
         elif cmd == "wait" and self.game.is_abortable():
