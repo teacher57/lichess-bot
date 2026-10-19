@@ -222,6 +222,9 @@ class Conversation:
             openings.chosen_by_game.pop(self.game.id, None)
             self.send_reply(line, "OK, I'll pick my own moves.")
             return
+        if moves_text.lower() in openings.OPENINGS:  # !line italian works like !opening italian
+            self.opening_command(line, f"opening {moves_text.lower()}")
+            return
         try:
             played = self.game.state.get("moves", "").split()
             custom = openings.parse_line(moves_text, played)

@@ -76,7 +76,8 @@ def parse_line(text: str, played: list[str] | None = None) -> list[str]:
     try:
         return played + _read_moves(text, board)
     except LineError as continued_error:
-        raise max(from_start_error, continued_error, key=lambda e: e.read)
+        # Report whichever reading got further; on a tie, the one from the current position.
+        raise max(continued_error, from_start_error, key=lambda e: e.read)
 
 
 def _read_moves(text: str, board: chess.Board) -> list[str]:
