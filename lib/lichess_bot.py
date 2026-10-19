@@ -73,8 +73,8 @@ class VersioningType(TypedDict):
 
 logger = logging.getLogger(__name__)
 
-# Seconds the bot waits before its first move (as White or Black) in casual games, so the opponent can pick an opening.
-OPENING_WAIT = 10
+# Seconds the bot waits before its first move (as White or Black) in casual games, so the opponent can pick an opening or type a line.
+OPENING_WAIT = 20
 
 with open(os.path.join(os.path.dirname(__file__), "versioning.yml")) as version_file:
     versioning_info: VersioningType = yaml.safe_load(version_file)
@@ -765,7 +765,8 @@ def play_game(li: lichess.Lichess,
                             if game.mode == "casual" and len(board.move_stack) < 2 and game.id not in openings.chosen_by_game:
                                 opening_wait_until = time.monotonic() + OPENING_WAIT
                                 conversation.send_message("player",
-                                                          f"You have {OPENING_WAIT} s to pick my opening: type !openings")
+                                                          f"You have {OPENING_WAIT} s to pick my opening: type !openings, "
+                                                          "or give me a line, e.g. !line e4 e5 Nf3 Nc6 Bc4")
                             else:
                                 move_attempted = True
                                 play_engine_move()

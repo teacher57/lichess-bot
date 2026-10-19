@@ -76,9 +76,13 @@ class Conversation:
                             "!eval (or any text starting with !eval; casual games only), !queue, "
                             "!openings (openings you can pick for me; casual games only), "
                             "!opening <name> (pick one), !opening off (cancel), "
+                            "!line <moves> (I follow your line from move 1, e.g. !line e4 e5 Nf3 Nc6 Bc4; "
+                            "if you leave it, I play my own moves; casual only), !line (show it), !line off, "
                             "!learn [chance %] (I blunder sometimes, find the tactic; casual only), !learn off")
         elif cmd == "openings" or cmd.startswith("opening "):
             self.opening_command(line, cmd)
+        elif cmd == "line" or cmd.startswith("line "):
+            self.line_command(line, line.text[len(self.command_prefix) + len("line"):].strip())
         elif cmd == "learn" or cmd.startswith("learn "):
             self.learn_command(line, cmd)
         elif cmd == "wait" and self.game.is_abortable():
@@ -164,12 +168,37 @@ class Conversation:
             openings.chosen_by_game.pop(self.game.id, None)
             self.send_reply(line, "OK, I'll pick my own moves.")
         elif choice in available:
-            openings.chosen_by_game[self.game.id] = choice
+            openings.choose(self.game.id, choice)
             self.send_reply(line, f"OK, I'll play the {openings.name(choice)}.")
         elif choice in openings.OPENINGS:
             self.send_reply(line, f"The {openings.name(choice)} isn't possible from here. Type !openings to see what is.")
         else:
             self.send_reply(line, f"I don't know '{choice}'. Type !openings to see the list.")
+
+    def line_command(self, line: ChatLine, moves_text: str) -> None:
+        """Handle !line <moves>, !line and !line off from the players (casual games only)."""
+        if line.room != "player":
+            return
+        if self.game.mode != "casual":
+            self.send_reply(line, "Setting my line works in casual games only.")
+            return
+        if not moves_text:
+            chosen = openings.chosen_by_game.get(self.game.id)
+            self.send_reply(line, f"I'm following: {openings.describe(chosen[1])}" if chosen
+                            else "No line set. Type !line <moves>, e.g. !line e4 e5 Nf3 Nc6 Bc4")
+            return
+        if moves_text.lower() == "off":
+            openings.chosen_by_game.pop(self.game.id, None)
+            self.send_reply(line, "OK, I'll pick my own moves.")
+            return
+        try:
+            custom = openings.parse_line(moves_text)
+        except ValueError as error:
+            self.send_reply(line, str(error))
+            return
+        bot_color = chess.WHITE if self.game.is_white else chess.BLACK
+        problem = openings.set_line(self.game.id, bot_color, self.game.state.get("moves", "").split(), custom)
+        self.send_reply(line, problem or f"OK, I'll follow your line: {openings.describe(custom)}")
 
     def send_reply(self, line: ChatLine, reply: str) -> None:
         """
