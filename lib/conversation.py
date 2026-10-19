@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 # Seconds the opponent gets for their first move after chatting, before the bot aborts the game.
 CHAT_ABORT_DELAY = 60
 
+# !moretime: seconds added to the opponent's clock (lichess allows 5-60 per call).
+MORETIME_DEFAULT = 15
+MORETIME_MIN = 5
+MORETIME_MAX = 60
+
 
 class ChatLine:
     """Information about the message."""
@@ -84,9 +89,13 @@ class Conversation:
                             "!opening <name> (pick one), !opening off (cancel), "
                             "!line <moves> (I follow your line, from move 1 or from the current position, e.g. !line e4 e5 Nf3 Nc6 Bc4; "
                             "if you leave it, I play my own moves; casual only), !line (show it), !line off, "
-                            "!learn [chance %] (I blunder sometimes, find the tactic; casual only), !learn off")
+                            "!learn [chance %] (I blunder sometimes, find the tactic; casual only), !learn off, "
+                            f"!moretime [{MORETIME_MIN}-{MORETIME_MAX}] (I add seconds to your clock, "
+                            f"{MORETIME_DEFAULT} by default; casual only)")
         elif cmd == "openings" or cmd.startswith("opening "):
             self.opening_command(line, cmd)
+        elif cmd == "moretime" or cmd.startswith("moretime "):
+            self.moretime_command(line, cmd)
         elif cmd == "line" or cmd.startswith("line "):
             self.line_command(line, line.text[len(self.command_prefix) + len("line"):].strip())
         elif cmd == "learn" or cmd.startswith("learn "):
@@ -180,6 +189,22 @@ class Conversation:
             self.send_reply(line, f"The {openings.name(choice)} isn't possible from here. Type !openings to see what is.")
         else:
             self.send_reply(line, f"I don't know '{choice}'. Type !openings to see the list.")
+
+    def moretime_command(self, line: ChatLine, cmd: str) -> None:
+        """Handle !moretime [seconds] from the opponent: add time to their clock (casual games only)."""
+        if line.room != "player" or line.username == self.game.username:
+            return
+        if self.game.mode != "casual":
+            self.send_reply(line, "Extra time works in casual games only.")
+            return
+        arg = cmd.split(maxsplit=1)[1].strip().rstrip("s") if " " in cmd else str(MORETIME_DEFAULT)
+        if not arg.isdigit() or not MORETIME_MIN <= int(arg) <= MORETIME_MAX:
+            self.send_reply(line, f"Type !moretime or !moretime <{MORETIME_MIN}-{MORETIME_MAX} seconds>, e.g. !moretime 30")
+            return
+        if self.li.add_time(self.game.id, int(arg)):
+            self.send_reply(line, f"Added {arg} s to your clock. Take your time!")
+        else:
+            self.send_reply(line, "Lichess didn't let me add time right now, sorry.")
 
     def line_command(self, line: ChatLine, moves_text: str) -> None:
         """Handle !line <moves>, !line and !line off from the players (casual games only)."""

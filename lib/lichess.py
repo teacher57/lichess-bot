@@ -26,6 +26,7 @@ ENDPOINTS = {
     "takeback": "/api/bot/game/{}/takeback/{}",
     "chat": "/api/bot/game/{}/chat",
     "abort": "/api/bot/game/{}/abort",
+    "add_time": "/api/round/{}/add-time/{}",
     "accept": "/api/challenge/{}/accept",
     "decline": "/api/challenge/{}/decline",
     "upgrade": "/api/bot/account/upgrade",
@@ -397,6 +398,19 @@ class Lichess:
     def abort(self, game_id: str) -> None:
         """Aborts a game."""
         self.api_post("abort", game_id)
+
+    def add_time(self, game_id: str, seconds_to_add: int) -> bool:
+        """
+        Add time to the opponent's clock (needs the challenge:write scope; lichess allows 5-60 s per call).
+
+        :return: Whether lichess accepted it.
+        """
+        try:
+            self.api_post("add_time", game_id, str(seconds_to_add))
+            return True
+        except HTTPError as error:
+            logger.warning(f"Could not add {seconds_to_add} s to the opponent's clock in {game_id}: {error}")
+            return False
 
     def get_event_stream(self) -> requests.models.Response:
         """Get a stream of the events (e.g. challenge, gameStart)."""
