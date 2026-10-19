@@ -257,6 +257,11 @@ class Game:
         self.terminate_time = Timer(terminate_in)
         self.disconnect_time = Timer(disconnect_in)
 
+    def delay_abort(self, abort_in: datetime.timedelta) -> None:
+        """Push back aborting the game (and only that), if it can still be aborted."""
+        if self.is_abortable():
+            self.abort_time = Timer(abort_in)
+
     def should_abort_now(self) -> bool:
         """Whether we should abort the game."""
         return self.is_abortable() and self.abort_time.is_expired()

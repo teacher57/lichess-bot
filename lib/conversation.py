@@ -13,6 +13,9 @@ MULTIPROCESSING_LIST_TYPE: TypeAlias = Sequence[model.Challenge]
 
 logger = logging.getLogger(__name__)
 
+# Seconds the opponent gets for their first move after chatting, before the bot aborts the game.
+CHAT_ABORT_DELAY = 60
+
 
 class ChatLine:
     """Information about the message."""
@@ -58,6 +61,9 @@ class Conversation:
         """
         self.messages.append(line)
         logger.info(f"*** {self.game.url()} [{line.room}] {line.username}: {line.text}")
+        if line.room == "player" and line.username != self.game.username:
+            # The opponent is here (e.g. typing a !line), so give them time for their first move.
+            self.game.delay_abort(seconds(CHAT_ABORT_DELAY))
         if line.text[0] == self.command_prefix:
             self.command(line, line.text[1:].lower())
 
@@ -76,7 +82,7 @@ class Conversation:
                             "!eval (or any text starting with !eval; casual games only), !queue, "
                             "!openings (openings you can pick for me; casual games only), "
                             "!opening <name> (pick one), !opening off (cancel), "
-                            "!line <moves> (I follow your line from move 1, e.g. !line e4 e5 Nf3 Nc6 Bc4; "
+                            "!line <moves> (I follow your line, from move 1 or from the current position, e.g. !line e4 e5 Nf3 Nc6 Bc4; "
                             "if you leave it, I play my own moves; casual only), !line (show it), !line off, "
                             "!learn [chance %] (I blunder sometimes, find the tactic; casual only), !learn off")
         elif cmd == "openings" or cmd.startswith("opening "):
@@ -192,12 +198,13 @@ class Conversation:
             self.send_reply(line, "OK, I'll pick my own moves.")
             return
         try:
-            custom = openings.parse_line(moves_text)
+            played = self.game.state.get("moves", "").split()
+            custom = openings.parse_line(moves_text, played)
         except ValueError as error:
             self.send_reply(line, str(error))
             return
         bot_color = chess.WHITE if self.game.is_white else chess.BLACK
-        problem = openings.set_line(self.game.id, bot_color, self.game.state.get("moves", "").split(), custom)
+        problem = openings.set_line(self.game.id, bot_color, played, custom)
         self.send_reply(line, problem or f"OK, I'll follow your line: {openings.describe(custom)}")
 
     def send_reply(self, line: ChatLine, reply: str) -> None:

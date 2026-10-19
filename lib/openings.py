@@ -42,14 +42,46 @@ def choose(game_id: str, key: str) -> None:
     chosen_by_game[game_id] = (f"the {name(key)}", OPENINGS[key][2].split())
 
 
-def parse_line(text: str) -> list[str]:
-    """
-    Read a line typed in chat, from the start of the game: SAN or UCI, move numbers optional ("1. e4 e5 2. Nf3").
+class LineError(ValueError):
+    """A typed line that can't be played; `read` is how many of its moves were legal before the bad one."""
 
-    :return: the line in UCI.
+    def __init__(self, message: str, read: int) -> None:
+        super().__init__(message)
+        self.read = read
+
+
+def parse_line(text: str, played: list[str] | None = None) -> list[str]:
+    """
+    Read a line typed in chat: SAN or UCI, move numbers optional ("1. e4 e5 2. Nf3").
+
+    The line can start from move 1 or continue from the moves played so far (after 1. e4, "e6 d4 d5").
+
+    :param played: the game's moves so far, in UCI.
+    :return: the whole line from move 1, in UCI.
     :raises ValueError: with a message for the chat when a move can't be read or isn't legal.
     """
+    played = played or []
+    try:
+        line = _read_moves(text, chess.Board())
+        if line[:len(played)] == played[:len(line)] or not played:
+            return line
+        from_start_error = LineError("That line doesn't match the moves played so far.", len(line))
+    except LineError as error:
+        if not played:
+            raise
+        from_start_error = error
     board = chess.Board()
+    for move in played:
+        board.push_uci(move)
+    try:
+        return played + _read_moves(text, board)
+    except LineError as continued_error:
+        raise max(from_start_error, continued_error, key=lambda e: e.read)
+
+
+def _read_moves(text: str, board: chess.Board) -> list[str]:
+    """Play the typed moves on the board and return them in UCI."""
+    start = len(board.move_stack)
     for token in text.split():
         token = re.sub(r"^\d+\.+", "", token).rstrip("!?")  # "1.e4", "3...Nc6", "Bc4!?"
         if not token:
@@ -67,11 +99,12 @@ def parse_line(text: str) -> list[str]:
             except ValueError:
                 move = None
             if move is None or not board.is_legal(move):
-                raise ValueError(f"I can't play '{token}' after {describe([m.uci() for m in board.move_stack]) or 'the start'}.")
+                raise LineError(f"I can't play '{token}' after {describe([m.uci() for m in board.move_stack]) or 'the start'}.",
+                                len(board.move_stack) - start)
         board.push(move)
-    if not board.move_stack:
-        raise ValueError("The line has no moves.")
-    return [m.uci() for m in board.move_stack]
+    if len(board.move_stack) == start:
+        raise LineError("The line has no moves.", 0)
+    return [m.uci() for m in board.move_stack[start:]]
 
 
 def set_line(game_id: str, bot_color: chess.Color, moves: list[str], line: list[str]) -> str | None:
