@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 teacher57. Written for teacher57-bot; see teacher57/LICENSE.
 """
 Learning mode (!learn [chance]): after the opening (book and chosen line), on every move the bot looks for a
 deliberate mistake that leaves the opponent a tactic: win at least a pawn, or mate, in 2-3 moves (never in 1).

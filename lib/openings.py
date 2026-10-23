@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 teacher57. Written for teacher57-bot; see teacher57/LICENSE.
 """Openings the opponent can ask the bot to play: a named one with !opening, or any line typed with !line."""
 import re
 import chess

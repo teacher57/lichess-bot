@@ -30,8 +30,11 @@ Casual games also get unlimited takebacks.
 
 ## License
 
-The engine in [`teacher57/`](teacher57/) is MIT ([LICENSE](teacher57/LICENSE)). Everything else is lichess-bot and its
-modifications, which stay under lichess-bot's AGPL-3.0 ([LICENSE](LICENSE)).
+Everything written for teacher57-bot is MIT ([LICENSE](teacher57/LICENSE)): the engine in [`teacher57/`](teacher57/),
+plus [`lib/openings.py`](lib/openings.py) (`!opening`, `!line`) and [`lib/training.py`](lib/training.py) (`!learn`).
+The rest is lichess-bot, including the edits wiring these features into its files, and stays under lichess-bot's
+AGPL-3.0 ([LICENSE](LICENSE)), which only its authors could change. The bot as a whole is therefore distributed under
+AGPL-3.0.
 
 ---
 

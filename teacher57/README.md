@@ -26,5 +26,5 @@ printf 'uci\nposition startpos moves e2e4\ngo movetime 2000\nquit\n' | python te
 
 ## License
 
-MIT, see [LICENSE](LICENSE). This covers the engine in this folder only. The rest of the repository is
-lichess-bot, which is AGPL-3.0.
+MIT, see [LICENSE](LICENSE). It covers this folder and the bot's own modules `lib/openings.py` and
+`lib/training.py`. The rest of the repository is lichess-bot, which is AGPL-3.0.
