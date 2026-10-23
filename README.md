@@ -1,3 +1,42 @@
+# teacher57-bot
+
+A teaching chess bot for [Lichess](https://lichess.org): a small Python engine ([`teacher57/`](teacher57/)) running on a
+customized fork of [lichess-bot](https://github.com/lichess-bot-devs/lichess-bot). AI friendly: built together with an AI
+coding assistant.
+
+## Chat commands (casual games)
+
+| Command | What it does |
+|---|---|
+| `!line <moves>` | The bot follows your line, from move 1 or from the current position (`!line e4 e5 Nf3 Nc6 Bc4`, or `!line e6 d4 d5` after 1. e4). SAN or UCI, move numbers optional. If you leave the line, it plays its own moves. `!line` shows it, `!line off` cancels, `!line italian` works like `!opening italian`. |
+| `!openings`, `!opening <name>` | Pick one of 13 named openings for the bot (Italian, Sicilian, French, ...). In casual games the bot waits 20 s before its first move so you can choose. |
+| `!learn [chance %]` | Learning mode: after the opening the bot sometimes blunders on purpose, says "Oops!", and checks whether you find the punishment. `!learn off` stops it. |
+| `!moretime [5-60]` | The bot adds seconds to your clock (15 by default). |
+| `!eval` | Engine stats plus the top 3 moves. |
+
+`!` starts a command and `/` ends it: anything after `/` is ignored, so you can repeat a command despite Lichess's
+duplicate-message filter (`!moretime / 2`). Chatting before your first move also delays the bot's auto-abort.
+Casual games also get unlimited takebacks.
+
+## Setup
+
+1. Install: `pip install -r requirements.txt`
+2. Make a new Lichess account for the bot (no games played on it), create a token with the `bot:play` and
+   `challenge:write` scopes, and upgrade it with `python lichess-bot.py -u`.
+3. `cp config.yml.default config.yml`, then set `engine.dir: "./teacher57/"`, `engine.name: "uci.py"`,
+   `engine.protocol: "uci"` and `engine.interpreter` to your Python.
+4. Keep the token out of files: `export LICHESS_BOT_TOKEN=...` (lichess-bot reads it from the environment), then
+   `python lichess-bot.py`.
+
+## License
+
+The engine in [`teacher57/`](teacher57/) is MIT ([LICENSE](teacher57/LICENSE)). Everything else is lichess-bot and its
+modifications, which stay under lichess-bot's AGPL-3.0 ([LICENSE](LICENSE)).
+
+---
+
+*The original lichess-bot README follows.*
+
 <div align="center">
 
   ![lichess-bot](https://github.com/lichess-bot-devs/lichess-bot-images/blob/main/lichess-bot-icon-400.png)
