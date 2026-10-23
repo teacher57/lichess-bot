@@ -28,6 +28,14 @@ Casual games also get unlimited takebacks.
 4. Keep the token out of files: `export LICHESS_BOT_TOKEN=...` (lichess-bot reads it from the environment), then
    `python lichess-bot.py`.
 
+## Contributors
+
+- [teacher57](https://github.com/teacher57): author of teacher57-bot
+- Claude (Anthropic's AI, via Claude Code): co-wrote the engine integration and the chat features (`!line`, `!learn`,
+  `!moretime`, `!opening`)
+
+Built on [lichess-bot](https://github.com/lichess-bot-devs/lichess-bot) by its contributors.
+
 ## License
 
 Everything written for teacher57-bot is MIT ([LICENSE](teacher57/LICENSE)): the engine in [`teacher57/`](teacher57/),
